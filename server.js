@@ -172,4 +172,9 @@ io.on("connection", (socket) => {
   });
 });
 
+app.get("/", (req, res) => {
+  res.send("✅ Chat backend is live!");
+});
+
+
 server.listen(PORT, () => console.log(`🚀 Server listening on port ${PORT}`));
