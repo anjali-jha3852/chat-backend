@@ -1,4 +1,5 @@
 // server.js
+// server.js
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -18,19 +19,19 @@ app.use(express.json());
 // --- CORS setup ---
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 app.use(cors({
-  origin: FRONTEND_URL,
-  credentials: true
+  origin: FRONTEND_URL,       // allow frontend URL
+  methods: ["GET", "POST"],   // allowed methods
+  credentials: true           // allow cookies / auth headers
 }));
 
 // --- MongoDB connection ---
-const mongoUri = process.env.MONGO_URI;
-mongoose.connect(mongoUri, {
+mongoose.connect(process.env.MONGO_URI, {
   autoIndex: true,
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
   .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => {
+  .catch(err => {
     console.error("❌ Mongo connection error:", err);
     process.exit(1);
   });
@@ -45,7 +46,6 @@ const UserSchema = new Schema({
   avatarUrl: String,
   lastSeen: Date
 }, { timestamps: true });
-
 const User = mongoose.model("User", UserSchema);
 
 const MessageSchema = new Schema({
@@ -55,7 +55,6 @@ const MessageSchema = new Schema({
   roomId: String,
   createdAt: { type: Date, default: Date.now }
 });
-
 const Message = mongoose.model("Message", MessageSchema);
 
 // --- Auth helpers ---
@@ -112,7 +111,7 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// --- Users Route ---
+// --- Users and Rooms ---
 app.post("/api/create-room", authMiddleware, (req, res) => {
   const roomId = uuidv4();
   const link = `${FRONTEND_URL}/chat/${roomId}`;
@@ -129,7 +128,7 @@ app.get("/api/users", authMiddleware, async (req, res) => {
   }
 });
 
-// --- Chat API Routes ---
+// --- Chat API ---
 app.get("/api/messages/:receiverId", authMiddleware, async (req, res) => {
   try {
     const { receiverId } = req.params;
@@ -139,7 +138,6 @@ app.get("/api/messages/:receiverId", authMiddleware, async (req, res) => {
         { sender: receiverId, receiver: req.userId }
       ]
     }).sort({ createdAt: 1 });
-
     res.json(messages);
   } catch (err) {
     console.error(err);
@@ -147,7 +145,7 @@ app.get("/api/messages/:receiverId", authMiddleware, async (req, res) => {
   }
 });
 
-// --- Server + Socket.IO setup ---
+// --- Socket.IO setup ---
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
@@ -158,26 +156,22 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log("⚡ User connected:", socket.id);
 
-  // Join room
   socket.on("join_room", ({ roomId, userId }) => {
     socket.join(roomId);
     console.log(`User ${userId} joined room ${roomId}`);
     socket.to(roomId).emit("user_joined", { userId });
   });
 
-  // Send message in room
   socket.on("send_message_room", async ({ roomId, sender, text }) => {
     const message = await Message.create({ sender, text, roomId });
     io.to(roomId).emit("receive_message_room", message);
   });
 
-  socket.on("disconnect", () => {
-    console.log("❌ User disconnected:", socket.id);
-  });
+  socket.on("disconnect", () => console.log("❌ User disconnected:", socket.id));
 });
 
-app.get("/", (req, res) => {
-  res.send("✅ Chat backend is live!");
-});
+// --- Health check ---
+app.get("/", (req, res) => res.send("✅ Chat backend is live!"));
 
+// --- Start server ---
 server.listen(PORT, () => console.log(`🚀 Server listening on port ${PORT}`));
