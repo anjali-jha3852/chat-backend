@@ -153,11 +153,12 @@ io.on("connection", (socket) => {
   console.log("⚡ User connected:", socket.id);
 
   // Join dynamic room
-  socket.on("join_room", (roomId, userId) => {
-    socket.join(roomId);
-    console.log(`User ${userId} joined room ${roomId}`);
-    socket.to(roomId).emit("user_joined", { userId });
-  });
+  socket.on("join_room", ({ roomId, userId }) => {
+  socket.join(roomId);
+  console.log(`User ${userId} joined room ${roomId}`);
+  socket.to(roomId).emit("user_joined", { userId });
+});
+
 
   // Handle sending messages in room
   socket.on("send_message_room", async ({ roomId, sender, text }) => {
