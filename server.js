@@ -1,3 +1,4 @@
+// server.js
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -6,15 +7,20 @@ const dotenv = require("dotenv");
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const { v4: uuidv4 } = require("uuid"); // add at the top
-
+const { v4: uuidv4 } = require("uuid");
 
 dotenv.config();
 
 // --- App setup ---
 const app = express();
 app.use(express.json());
-app.use(cors());
+
+// --- CORS setup ---
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+app.use(cors({
+  origin: FRONTEND_URL,
+  credentials: true
+}));
 
 // --- MongoDB connection ---
 const mongoUri = process.env.MONGO_URI;
@@ -46,7 +52,7 @@ const MessageSchema = new Schema({
   sender: { type: Schema.Types.ObjectId, ref: "User" },
   receiver: { type: Schema.Types.ObjectId, ref: "User" },
   text: String,
-  roomId: String, // optional if using rooms
+  roomId: String,
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -107,10 +113,9 @@ app.post("/api/login", async (req, res) => {
 });
 
 // --- Users Route ---
-
 app.post("/api/create-room", authMiddleware, (req, res) => {
-  const roomId = uuidv4(); // generate unique room ID
-  const link = `${process.env.FRONTEND_URL || "http://localhost:5173"}/chat/${roomId}`;
+  const roomId = uuidv4();
+  const link = `${FRONTEND_URL}/chat/${roomId}`;
   res.json({ roomId, link });
 });
 
@@ -145,26 +150,24 @@ app.get("/api/messages/:receiverId", authMiddleware, async (req, res) => {
 // --- Server + Socket.IO setup ---
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
+
 const io = new Server(server, {
-  cors: { origin: "*" }
+  cors: { origin: FRONTEND_URL, methods: ["GET", "POST"], credentials: true }
 });
 
 io.on("connection", (socket) => {
   console.log("⚡ User connected:", socket.id);
 
-  // Join dynamic room
+  // Join room
   socket.on("join_room", ({ roomId, userId }) => {
-  socket.join(roomId);
-  console.log(`User ${userId} joined room ${roomId}`);
-  socket.to(roomId).emit("user_joined", { userId });
-});
+    socket.join(roomId);
+    console.log(`User ${userId} joined room ${roomId}`);
+    socket.to(roomId).emit("user_joined", { userId });
+  });
 
-
-  // Handle sending messages in room
+  // Send message in room
   socket.on("send_message_room", async ({ roomId, sender, text }) => {
-    // Optional: Save message in DB
     const message = await Message.create({ sender, text, roomId });
-    
     io.to(roomId).emit("receive_message_room", message);
   });
 
@@ -176,6 +179,5 @@ io.on("connection", (socket) => {
 app.get("/", (req, res) => {
   res.send("✅ Chat backend is live!");
 });
-
 
 server.listen(PORT, () => console.log(`🚀 Server listening on port ${PORT}`));
